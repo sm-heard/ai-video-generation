@@ -48,6 +48,12 @@ export const stylePresetEnum = pgEnum('style_preset', [
   'minimalist_cinematic',
 ]);
 
+export type ProjectStatus = (typeof projectStatusEnum.enumValues)[number];
+export type SceneStatus = (typeof sceneStatusEnum.enumValues)[number];
+export type SceneSection = (typeof sceneSectionEnum.enumValues)[number];
+export type EnergyLevel = (typeof energyEnum.enumValues)[number];
+export type StylePreset = (typeof stylePresetEnum.enumValues)[number];
+
 export const projects = pgTable('projects', {
   id: uuid('id').defaultRandom().primaryKey(),
   audioUrl: text('audio_url').notNull(),
@@ -66,7 +72,7 @@ export const scenes = pgTable('scenes', {
   projectId: uuid('project_id')
     .notNull()
     .references(() => projects.id, { onDelete: 'cascade' }),
-  order: integer('"order"').notNull(),
+  order: integer('order_index').notNull(),
   startTime: doublePrecision('start_time').notNull(),
   duration: doublePrecision('duration').notNull(),
   startBeatIndex: integer('start_beat_index').notNull(),

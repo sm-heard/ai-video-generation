@@ -133,8 +133,8 @@ Assumptions:
       - [ ] Early scenes → `"INTRO"`.
       - [ ] Middle scenes → `"VERSE"` / `"CHORUS"` (alternate).
       - [ ] Final scenes → `"OUTRO"`.
-  - [ ] **LLM Storyboard (Claude via Vercel AI SDK)**
-    - [ ] Call **Claude 4.5 Sonnet** using `generateObject`:
+  - [ ] **LLM Storyboard (OpenAI via Vercel AI SDK or official client)**
+    - [ ] Call **OpenAI GPT-5.1** (latest available structured-output model) using `generateObject` or the OpenAI responses API:
       - [ ] Inputs: `prompt`, `stylePreset`, `energy`, sections, and beat timing.
       - [ ] Output: array of scene descriptors with:
         - [ ] `visualPrompt`, optional style notes, motion suggestions.
@@ -185,13 +185,13 @@ Assumptions:
 *Goal: Replace placeholders with real generated images and motion, with robust status tracking and retries.*
 
 - [ ] **External API Spikes (Before Full Integration)**
-  - [ ] **Nano Banana Pro (Images)**
-    - [ ] Hardcode a sample prompt and call API.
+  - [ ] **Nano Banana Pro via Replicate (Images)**
+    - [ ] Hardcode a sample prompt and invoke the Replicate Nano Banana model.
     - [ ] Confirm auth, request shape, response structure.
     - [ ] Measure latency and failure modes.
-  - [ ] **Kling (Image‑to‑Video)**
-    - [ ] Hardcode a sample image and call API.
-    - [ ] Confirm how to get `predictionId` and poll status.
+  - [ ] **Kling via Replicate (Image-to-Video)**
+    - [ ] Hardcode a sample image and invoke the Replicate Kling model.
+    - [ ] Confirm how to get `predictionId` (Replicate prediction ID) and poll status.
     - [ ] Verify output format and size.
 
 - [ ] **Inngest Function: Step 2 – `generate-images`**
@@ -199,7 +199,7 @@ Assumptions:
     - [ ] Input: `projectId`.
     - [ ] Select scenes where `status IN ("PLANNED", "IMAGE_PENDING")`.
     - [ ] For each scene:
-      - [ ] Call Nano Banana Pro with `visualPrompt`, `stylePreset`, `energy`, and section.
+      - [ ] Call Nano Banana Pro via Replicate with `visualPrompt`, `stylePreset`, `energy`, and section.
       - [ ] Upload resulting image to Blob via `uploadImage`.
       - [ ] Update `scenes.imageKeyframeUrl`, `scenes.status = "IMAGE_DONE"`, `provider = "nano_banana"`, `metadata` as needed.
     - [ ] Handle retries (rely on Inngest retry + simple error checks).
@@ -210,8 +210,8 @@ Assumptions:
 - [ ] **Inngest Function: Step 3 – `trigger-animation`**
   - [ ] Define `step.run('trigger-animation', ...)`:
     - [ ] For each scene with `status IN ("IMAGE_DONE", "VIDEO_PENDING")`:
-      - [ ] Call Kling image‑to‑video with `imageKeyframeUrl`.
-      - [ ] Store `scenes.predictionId`, `provider = "kling"`, `status = "VIDEO_PENDING"`.
+      - [ ] Call Kling image-to-video via Replicate with `imageKeyframeUrl`.
+      - [ ] Store `scenes.predictionId` (Replicate prediction ID), `provider = "kling"` (or `"replicate"`), `status = "VIDEO_PENDING"`.
     - [ ] Return list of `{ sceneId, predictionId }`.
 
 - [ ] **Inngest Function: Step 4 – `wait-for-kling`**
@@ -301,4 +301,3 @@ Assumptions:
   - [ ] Connect Inngest via Vercel Integration.
   - [ ] Configure all environment variables in Vercel dashboard.
   - [ ] Generate at least **two** sample videos end‑to‑end as demo artifacts.
-
