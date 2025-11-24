@@ -47,12 +47,22 @@ export const stylePresetEnum = pgEnum('style_preset', [
   'graffiti_energy',
   'minimalist_cinematic',
 ]);
+export const imageModelEnum = pgEnum('image_model', [
+  'nano_banana',
+  'imagen_fast',
+]);
+export const videoModelEnum = pgEnum('video_model', [
+  'seedance_fast',
+  'kling_turbo',
+]);
 
 export type ProjectStatus = (typeof projectStatusEnum.enumValues)[number];
 export type SceneStatus = (typeof sceneStatusEnum.enumValues)[number];
 export type SceneSection = (typeof sceneSectionEnum.enumValues)[number];
 export type EnergyLevel = (typeof energyEnum.enumValues)[number];
 export type StylePreset = (typeof stylePresetEnum.enumValues)[number];
+export type ImageModel = (typeof imageModelEnum.enumValues)[number];
+export type VideoModel = (typeof videoModelEnum.enumValues)[number];
 
 export const projects = pgTable('projects', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -63,6 +73,8 @@ export const projects = pgTable('projects', {
   duration: integer('duration').notNull(), // seconds (capped at 60 for MVP)
   status: projectStatusEnum('status').default('CREATED').notNull(),
   beatsSummary: jsonb('beats_summary'),
+  imageModel: imageModelEnum('image_model').default('nano_banana'),
+  videoModel: videoModelEnum('video_model').default('seedance_fast'),
   error: text('error'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });

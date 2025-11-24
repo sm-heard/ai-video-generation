@@ -16,8 +16,20 @@ const energyOptions = [
   { value: 'high', label: 'High' },
 ] as const;
 
+const imageModelOptions = [
+  { value: 'nano_banana', label: 'Nano Banana Pro (premium)' },
+  { value: 'imagen_fast', label: 'Imagen 4 Fast (budget)' },
+] as const;
+
+const videoModelOptions = [
+  { value: 'seedance_fast', label: 'Seedance Fast (budget)' },
+  { value: 'kling_turbo', label: 'Kling Turbo (premium)' },
+] as const;
+
 type StylePresetValue = (typeof stylePresets)[number]['value'];
 type EnergyValue = (typeof energyOptions)[number]['value'];
+type ImageModelValue = (typeof imageModelOptions)[number]['value'];
+type VideoModelValue = (typeof videoModelOptions)[number]['value'];
 
 type AudioAnalysis = {
   duration: number;
@@ -34,6 +46,8 @@ export default function Home() {
   const [prompt, setPrompt] = useState('');
   const [stylePreset, setStylePreset] = useState<StylePresetValue>(stylePresets[0].value);
   const [energy, setEnergy] = useState<EnergyValue>('medium');
+  const [imageModel, setImageModel] = useState<ImageModelValue>('nano_banana');
+  const [videoModel, setVideoModel] = useState<VideoModelValue>('seedance_fast');
   const [analysis, setAnalysis] = useState<AudioAnalysis | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -154,6 +168,8 @@ export default function Home() {
             duration: analysis.duration,
             tempo: analysis.tempo,
             beats: analysis.beats,
+            imageModel,
+            videoModel,
           }),
         });
 
@@ -171,7 +187,7 @@ export default function Home() {
         setIsSubmitting(false);
       }
     },
-    [analysis, energy, prompt, router, selectedFile, stylePreset],
+    [analysis, energy, imageModel, prompt, router, selectedFile, stylePreset, videoModel],
   );
 
   return (
@@ -241,6 +257,37 @@ export default function Home() {
                   className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-white focus:border-white/40 focus:outline-none"
                 >
                   {energyOptions.map((option) => (
+                    <option key={option.value} value={option.value} className="bg-slate-900 text-white">
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-white/80">Image model</label>
+                <select
+                  value={imageModel}
+                  onChange={(event) => setImageModel(event.target.value as ImageModelValue)}
+                  className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-white focus:border-white/40 focus:outline-none"
+                >
+                  {imageModelOptions.map((option) => (
+                    <option key={option.value} value={option.value} className="bg-slate-900 text-white">
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-white/80">Video model</label>
+                <select
+                  value={videoModel}
+                  onChange={(event) => setVideoModel(event.target.value as VideoModelValue)}
+                  className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-white focus:border-white/40 focus:outline-none"
+                >
+                  {videoModelOptions.map((option) => (
                     <option key={option.value} value={option.value} className="bg-slate-900 text-white">
                       {option.label}
                     </option>

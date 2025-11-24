@@ -13,6 +13,8 @@ const createProjectSchema = z.object({
   duration: z.number().min(1).max(MAX_DURATION_SECONDS),
   tempo: z.number().positive().max(400),
   beats: z.array(z.number().nonnegative()).min(1),
+  imageModel: z.enum(['nano_banana', 'imagen_fast']).optional(),
+  videoModel: z.enum(['seedance_fast', 'kling_turbo']).optional(),
 });
 
 export async function POST(request: Request) {
@@ -27,8 +29,17 @@ export async function POST(request: Request) {
     );
   }
 
-  const { audioUrl, prompt, energy, stylePreset, duration, beats, tempo } =
-    result.data;
+  const {
+    audioUrl,
+    prompt,
+    energy,
+    stylePreset,
+    duration,
+    beats,
+    tempo,
+    imageModel,
+    videoModel,
+  } = result.data;
 
   try {
     const trimmedBeats = beats
@@ -49,6 +60,8 @@ export async function POST(request: Request) {
           beatCount: trimmedBeats.length,
           preview: trimmedBeats.slice(0, 64),
         },
+        imageModel: imageModel ?? 'nano_banana',
+        videoModel: videoModel ?? 'seedance_fast',
       })
       .returning();
 

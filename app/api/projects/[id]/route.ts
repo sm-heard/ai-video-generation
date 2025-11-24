@@ -7,9 +7,9 @@ import { db, projects } from '@/lib/db';
 
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const projectId = params.id;
+  const { id: projectId } = await params;
 
   if (!projectId) {
     return NextResponse.json(

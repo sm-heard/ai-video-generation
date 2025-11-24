@@ -3,8 +3,10 @@
 import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2, Clock } from 'lucide-react';
+import { Player } from '@remotion/player';
 
 import { cn } from '@/lib/utils';
+import { MusicVideo, type SceneClip } from '@/remotion/MusicVideo';
 
 const STATUS_STEPS = [
   { id: 'CREATED', label: 'Created' },
@@ -20,6 +22,8 @@ type ProjectStatus = (typeof STATUS_STEPS)[number]['id'] | 'ERROR';
 interface Scene {
   id: string;
   order: number;
+  startTime: number;
+  duration: number;
   section: string;
   status: string;
   visualPrompt: string;
@@ -30,9 +34,12 @@ interface Scene {
 interface ApiProjectResponse {
   project: {
     id: string;
+    audioUrl: string;
     prompt: string;
     stylePreset: string | null;
     energy: string | null;
+    imageModel: string | null;
+    videoModel: string | null;
     duration: number;
     status: ProjectStatus;
     beatsSummary: {
@@ -109,6 +116,27 @@ export default function ProjectDetailClient({
     return getStatusIndex(project.status);
   }, [project]);
 
+  const remotionScenes = useMemo<SceneClip[]>(() => {
+    if (!project) {
+      return [];
+    }
+    return project.scenes.map((scene) => ({
+      id: scene.id,
+      order: scene.order,
+      startTime:
+        typeof scene.startTime === 'number'
+          ? scene.startTime
+          : Number(scene.startTime ?? scene.order * 4),
+      duration:
+        typeof scene.duration === 'number'
+          ? Math.max(scene.duration, 0.5)
+          : 4,
+      imageKeyframeUrl: scene.imageKeyframeUrl,
+      videoClipUrl: scene.videoClipUrl,
+      visualPrompt: scene.visualPrompt,
+    }));
+  }, [project]);
+
   if (isLoading) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/70">
@@ -125,6 +153,9 @@ export default function ProjectDetailClient({
     );
   }
 
+  const fps = 30;
+  const durationInFrames = Math.max(1, Math.round(project.duration * fps));
+
   return (
     <div className="flex flex-col gap-8">
       {errorMessage && (
@@ -140,16 +171,22 @@ export default function ProjectDetailClient({
             <p className="text-sm uppercase tracking-wide text-white/60">Prompt</p>
             <p className="text-lg font-medium">{project.prompt}</p>
           </div>
-          <div className="flex flex-wrap gap-4 text-sm text-white/70">
-            <span className="rounded-full border border-white/20 px-3 py-1">
-              Style: {project.stylePreset}
-            </span>
-            <span className="rounded-full border border-white/20 px-3 py-1">
-              Energy: {project.energy}
-            </span>
-            <span className="rounded-full border border-white/20 px-3 py-1">
-              Duration: {project.duration}s
-            </span>
+            <div className="flex flex-wrap gap-4 text-sm text-white/70">
+              <span className="rounded-full border border-white/20 px-3 py-1">
+                Style: {project.stylePreset}
+              </span>
+              <span className="rounded-full border border-white/20 px-3 py-1">
+                Energy: {project.energy}
+              </span>
+              <span className="rounded-full border border-white/20 px-3 py-1">
+                Image model: {project.imageModel}
+              </span>
+              <span className="rounded-full border border-white/20 px-3 py-1">
+                Video model: {project.videoModel}
+              </span>
+              <span className="rounded-full border border-white/20 px-3 py-1">
+                Duration: {project.duration}s
+              </span>
             {project.beatsSummary?.tempo && (
               <span className="rounded-full border border-white/20 px-3 py-1">
                 Tempo: {project.beatsSummary.tempo} BPM
@@ -169,6 +206,36 @@ export default function ProjectDetailClient({
           </p>
         </div>
       </section>
+
+      {project.scenes.length > 0 && (
+        <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <p className="text-sm uppercase tracking-wide text-white/60">
+              Live preview
+            </p>
+            <p className="text-sm text-white/60">
+              Powered by Remotion player · {fps} FPS
+            </p>
+          </div>
+          <Player
+            component={MusicVideo}
+            inputProps={{ scenes: remotionScenes, audioUrl: project.audioUrl, fps }}
+            durationInFrames={durationInFrames}
+            compositionWidth={1280}
+            compositionHeight={720}
+            fps={fps}
+            controls
+            loop
+            autoPlay
+            style={{
+              width: '100%',
+              borderRadius: '1rem',
+              overflow: 'hidden',
+              border: '1px solid rgba(255,255,255,0.1)',
+            }}
+          />
+        </section>
+      )}
 
       <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
         <p className="mb-4 text-sm uppercase tracking-wide text-white/60">

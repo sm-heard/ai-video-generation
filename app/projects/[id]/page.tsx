@@ -1,12 +1,16 @@
 import ProjectDetailClient from './project-detail-client';
 
 interface ProjectDetailPageParams {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
-export default function ProjectDetailPage({ params }: ProjectDetailPageParams) {
+export default async function ProjectDetailPage({
+  params,
+}: ProjectDetailPageParams) {
+  const { id } = await params;
+
   return (
     <div className="min-h-screen bg-slate-950 px-6 py-10 text-white">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
@@ -18,7 +22,7 @@ export default function ProjectDetailPage({ params }: ProjectDetailPageParams) {
             show placeholder media until real assets arrive.
           </p>
         </header>
-        <ProjectDetailClient projectId={params.id} />
+        <ProjectDetailClient projectId={id} />
       </div>
     </div>
   );
