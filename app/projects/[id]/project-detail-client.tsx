@@ -195,6 +195,19 @@ export default function ProjectDetailClient({
     };
   }, [exportUrl]);
 
+  const toggleAudio = useCallback(() => {
+    setIsAudioEnabled((prev) => {
+      const next = !prev;
+      if (next) {
+        playerRef.current?.unmute();
+        playerRef.current?.play();
+      } else {
+        playerRef.current?.mute();
+      }
+      return next;
+    });
+  }, []);
+
   const handleExport = useCallback(async () => {
     if (!project) {
       return;
@@ -204,7 +217,7 @@ export default function ProjectDetailClient({
     setExportUrl(null);
 
     try {
-      const container = playerRef.current?.getContainerNode();
+      const container = document.getElementById('project-preview-canvas');
       const canvas = container?.querySelector('canvas') as
         | (HTMLCanvasElement & { captureStream?: (fps?: number) => MediaStream })
         | undefined;
@@ -241,7 +254,6 @@ export default function ProjectDetailClient({
         recorder.onstop = () => resolve();
       });
 
-      setIsAudioEnabled(true);
       playerRef.current?.pause();
       playerRef.current?.seekTo(0);
       audioElement?.pause();
@@ -251,7 +263,9 @@ export default function ProjectDetailClient({
 
       recorder.start();
       playerRef.current?.play();
-      await audioElement?.play();
+      if (audioElement) {
+        await audioElement.play().catch(() => null);
+      }
 
       await new Promise((resolve) =>
         setTimeout(resolve, project.duration * 1000 + 750),
@@ -376,7 +390,7 @@ export default function ProjectDetailClient({
               <span>Powered by Remotion · {fps} FPS</span>
               <button
                 type="button"
-                onClick={() => setIsAudioEnabled((prev) => !prev)}
+                onClick={toggleAudio}
                 className={cn(
                   'rounded-full border px-3 py-1 transition',
                   isAudioEnabled
@@ -397,6 +411,7 @@ export default function ProjectDetailClient({
               </button>
             </div>
           </div>
+          <div id="project-preview-canvas" className="rounded-2xl border border-transparent">
           <Player
             component={MusicVideo}
             inputProps={{
@@ -419,6 +434,7 @@ export default function ProjectDetailClient({
               border: '1px solid rgba(255,255,255,0.1)',
             }}
           />
+          </div>
           <audio
             ref={audioRef}
             src={project.audioUrl}
