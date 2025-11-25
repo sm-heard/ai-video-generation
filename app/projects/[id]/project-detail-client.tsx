@@ -2,19 +2,42 @@
 
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, CheckCircle2, Clock, Download } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  Download,
+  ImageIcon,
+  Loader2,
+} from 'lucide-react';
 import { Player, type PlayerRef } from '@remotion/player';
 
 import { cn } from '@/lib/utils';
 import { MusicVideo, type SceneClip } from '@/remotion/MusicVideo';
 
 const STATUS_STEPS = [
-  { id: 'CREATED', label: 'Created' },
-  { id: 'PLANNING', label: 'Planning scenes' },
-  { id: 'GENERATING_IMAGES', label: 'Generating images' },
-  { id: 'GENERATING_VIDEO', label: 'Animating clips' },
-  { id: 'FINALIZING', label: 'Finalizing preview' },
-  { id: 'COMPLETED', label: 'Completed' },
+  { id: 'CREATED', label: 'Created', description: 'Waiting to start planner' },
+  {
+    id: 'PLANNING',
+    label: 'Planning scenes',
+    description: 'Grouping beats + writing storyboard',
+  },
+  {
+    id: 'GENERATING_IMAGES',
+    label: 'Generating images',
+    description: 'Calling the image model for each scene',
+  },
+  {
+    id: 'GENERATING_VIDEO',
+    label: 'Animating clips',
+    description: 'Converting keyframes to motion clips',
+  },
+  {
+    id: 'FINALIZING',
+    label: 'Finalizing preview',
+    description: 'Syncing everything in Remotion',
+  },
+  { id: 'COMPLETED', label: 'Completed', description: 'Ready to export' },
 ] as const;
 
 type ProjectStatus = (typeof STATUS_STEPS)[number]['id'] | 'ERROR';
@@ -144,6 +167,18 @@ export default function ProjectDetailClient({
       videoClipUrl: scene.videoClipUrl,
       visualPrompt: scene.visualPrompt,
     }));
+  }, [project]);
+
+  const sceneStats = useMemo(() => {
+    const total = project?.scenes.length ?? 0;
+    const imagesDone =
+      project?.scenes.filter((scene) =>
+        ['IMAGE_DONE', 'VIDEO_PENDING', 'VIDEO_DONE'].includes(scene.status),
+      ).length ?? 0;
+    const videosDone =
+      project?.scenes.filter((scene) => scene.status === 'VIDEO_DONE').length ??
+      0;
+    return { total, imagesDone, videosDone };
   }, [project]);
 
   const fps = 30;
@@ -321,7 +356,7 @@ export default function ProjectDetailClient({
             {project.status === 'ERROR' ? 'Error' : STATUS_STEPS[currentStepIndex].label}
           </p>
           <p className="text-sm text-white/60">
-            Updated {new Date(project.createdAt).toLocaleString()}
+            {STATUS_STEPS[currentStepIndex]?.description}
           </p>
         </div>
       </section>
@@ -334,7 +369,7 @@ export default function ProjectDetailClient({
                 Live preview
               </p>
               <p className="text-xs text-white/50">
-                Hit play, then enable audio below to hear the exact track you uploaded.
+                Hit play, then toggle audio on to hear the exact track you uploaded.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3 text-sm text-white/70">
@@ -385,18 +420,11 @@ export default function ProjectDetailClient({
             }}
           />
           <audio
-            className="mt-4 w-full"
-            controls
-            preload="none"
             ref={audioRef}
             src={project.audioUrl}
-          >
-            Your browser does not support the audio element.
-          </audio>
-          <p className="mt-2 text-xs text-white/50">
-            (The player above keeps video and audio in sync; the standalone audio controls are provided to avoid
-            autoplay restrictions.)
-          </p>
+            preload="auto"
+            className="hidden"
+          />
           {exportError && (
             <p className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-100">
               {exportError}
@@ -448,6 +476,30 @@ export default function ProjectDetailClient({
             );
           })}
         </ol>
+        <div className="mt-6 grid gap-4 sm:grid-cols-3">
+          <div className="rounded-xl border border-white/10 bg-black/30 p-4 text-white/80">
+            <p className="text-xs uppercase tracking-wide text-white/50">
+              Scenes planned
+            </p>
+            <p className="text-2xl font-semibold">{sceneStats.total}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/30 p-4 text-white/80">
+            <p className="text-xs uppercase tracking-wide text-white/50">
+              Keyframes ready
+            </p>
+            <p className="text-2xl font-semibold">
+              {sceneStats.imagesDone}/{sceneStats.total}
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/30 p-4 text-white/80">
+            <p className="text-xs uppercase tracking-wide text-white/50">
+              Clips animated
+            </p>
+            <p className="text-2xl font-semibold">
+              {sceneStats.videosDone}/{sceneStats.total}
+            </p>
+          </div>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
@@ -478,7 +530,7 @@ export default function ProjectDetailClient({
                   </span>
                   <span
                     className={cn(
-                      'rounded-full px-3 py-1 text-xs uppercase tracking-wide',
+                      'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs uppercase tracking-wide',
                       scene.status === 'VIDEO_DONE'
                         ? 'bg-emerald-400/20 text-emerald-200'
                         : scene.status === 'ERROR'
@@ -486,6 +538,15 @@ export default function ProjectDetailClient({
                           : 'bg-white/10 text-white/70',
                     )}
                   >
+                    {scene.status === 'VIDEO_DONE' ? (
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    ) : scene.status.includes('PENDING') ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : scene.status.includes('IMAGE') ? (
+                      <ImageIcon className="h-3.5 w-3.5" />
+                    ) : (
+                      <Clock className="h-3.5 w-3.5" />
+                    )}
                     {scene.status}
                   </span>
                 </div>
@@ -518,7 +579,8 @@ export default function ProjectDetailClient({
                   onClick={() => handleRegenerateScene(scene.id)}
                   disabled={
                     regeneratingSceneId === scene.id ||
-                    scene.status.includes('PENDING')
+                    scene.status.includes('PENDING') ||
+                    project.status === 'PLANNING'
                   }
                   className="text-xs uppercase tracking-wide text-white/70 underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:text-white/30"
                 >
