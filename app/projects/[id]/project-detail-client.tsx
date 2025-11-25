@@ -93,7 +93,6 @@ export default function ProjectDetailClient({
     useState<ApiProjectResponse['project'] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isAudioEnabled, setIsAudioEnabled] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportUrl, setExportUrl] = useState<string | null>(null);
@@ -102,7 +101,7 @@ export default function ProjectDetailClient({
   );
 
   const playerRef = useRef<PlayerRef>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const exportAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     let isActive = true;
@@ -195,19 +194,6 @@ export default function ProjectDetailClient({
     };
   }, [exportUrl]);
 
-  const toggleAudio = useCallback(() => {
-    setIsAudioEnabled((prev) => {
-      const next = !prev;
-      if (next) {
-        playerRef.current?.unmute();
-        playerRef.current?.play();
-      } else {
-        playerRef.current?.mute();
-      }
-      return next;
-    });
-  }, []);
-
   const handleExport = useCallback(async () => {
     if (!project) {
       return;
@@ -225,10 +211,18 @@ export default function ProjectDetailClient({
         throw new Error('Unable to capture video stream from preview.');
       }
       const canvasStream = canvas.captureStream(fps);
-      const audioElement = audioRef.current;
+      if (!exportAudioRef.current) {
+        exportAudioRef.current =
+          typeof window !== 'undefined' ? new Audio(project.audioUrl) : null;
+        if (exportAudioRef.current) {
+          exportAudioRef.current.crossOrigin = 'anonymous';
+        }
+      }
+      const exportAudio = exportAudioRef.current;
+
       const audioStream =
-        audioElement && 'captureStream' in audioElement
-          ? audioElement.captureStream()
+        exportAudio && 'captureStream' in exportAudio
+          ? exportAudio.captureStream()
           : null;
 
       const combinedStream = new MediaStream([
@@ -256,15 +250,11 @@ export default function ProjectDetailClient({
 
       playerRef.current?.pause();
       playerRef.current?.seekTo(0);
-      audioElement?.pause();
-      if (audioElement) {
-        audioElement.currentTime = 0;
-      }
 
       recorder.start();
       playerRef.current?.play();
-      if (audioElement) {
-        await audioElement.play().catch(() => null);
+      if (exportAudio) {
+        await exportAudio.play().catch(() => null);
       }
 
       await new Promise((resolve) =>
@@ -274,7 +264,7 @@ export default function ProjectDetailClient({
       recorder.stop();
       await stopped;
       playerRef.current?.pause();
-      audioElement?.pause();
+      exportAudio?.pause();
 
       const blob = new Blob(chunks, { type: 'video/webm' });
       const objectUrl = URL.createObjectURL(blob);
@@ -383,23 +373,11 @@ export default function ProjectDetailClient({
                 Live preview
               </p>
               <p className="text-xs text-white/50">
-                Hit play, then toggle audio on to hear the exact track you uploaded.
+                Hit play to watch and hear the exact track you uploaded.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3 text-sm text-white/70">
               <span>Powered by Remotion · {fps} FPS</span>
-              <button
-                type="button"
-                onClick={toggleAudio}
-                className={cn(
-                  'rounded-full border px-3 py-1 transition',
-                  isAudioEnabled
-                    ? 'border-emerald-400/50 text-emerald-200'
-                    : 'border-white/20 text-white/70',
-                )}
-              >
-                {isAudioEnabled ? 'Audio on' : 'Enable audio'}
-              </button>
               <button
                 type="button"
                 onClick={handleExport}
@@ -425,7 +403,7 @@ export default function ProjectDetailClient({
             fps={fps}
             controls
             loop
-            muted={!isAudioEnabled}
+            muted={false}
             ref={playerRef}
             style={{
               width: '100%',
