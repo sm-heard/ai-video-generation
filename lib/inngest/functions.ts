@@ -65,6 +65,13 @@ type ProjectGenerateVideoEvent = {
   };
 };
 
+type SceneRegenerateEvent = {
+  name: 'scene/regenerate';
+  data: {
+    sceneId: string;
+  };
+};
+
 const MIN_SCENE_DURATION = 3;
 const MAX_SCENE_DURATION = 5;
 const MAX_SCENES = 4;
@@ -538,10 +545,83 @@ const generateVideoFunction = inngest.createFunction(
   },
 );
 
+const regenerateSceneFunction = inngest.createFunction(
+  { id: 'scene-regenerate', name: 'Regenerate individual scene' },
+  { event: 'scene/regenerate' },
+  async ({ event, step }) => {
+    const { sceneId } = (event as SceneRegenerateEvent).data;
+
+    const scene = await db.query.scenes.findFirst({
+      where: eq(scenes.id, sceneId),
+    });
+
+    if (!scene) {
+      return;
+    }
+
+    const project = await db.query.projects.findFirst({
+      where: eq(projects.id, scene.projectId),
+    });
+
+    if (!project) {
+      return;
+    }
+
+    await step.run('regenerate-image', async () => {
+      await db
+        .update(scenes)
+        .set({
+          status: 'IMAGE_PENDING',
+          imageKeyframeUrl: null,
+          videoClipUrl: null,
+        })
+        .where(eq(scenes.id, sceneId));
+
+      const imageUrl =
+        (await generateSceneImage(scene.visualPrompt, project.imageModel)) ??
+        buildPlaceholderImage(project.id, scene.order);
+
+      await db
+        .update(scenes)
+        .set({
+          imageKeyframeUrl: imageUrl,
+          status: 'IMAGE_DONE',
+        })
+        .where(eq(scenes.id, sceneId));
+    });
+
+    await step.run('regenerate-video', async () => {
+      await db
+        .update(scenes)
+        .set({ status: 'VIDEO_PENDING', videoClipUrl: null })
+        .where(eq(scenes.id, sceneId));
+
+      const videoUrl = await generateSceneVideo(
+        scene.visualPrompt,
+        project.videoModel,
+        scene.duration,
+      );
+
+      if (!videoUrl) {
+        throw new Error('Failed to regenerate video clip');
+      }
+
+      await db
+        .update(scenes)
+        .set({
+          videoClipUrl: videoUrl,
+          status: 'VIDEO_DONE',
+        })
+        .where(eq(scenes.id, sceneId));
+    });
+  },
+);
+
 export const inngestFunctions: InngestFunction[] = [
   planScenesFunction,
   generateImagesFunction,
   generateVideoFunction,
+  regenerateSceneFunction,
 ];
 async function generateSceneImage(prompt: string, model: ImageModel) {
   if (!process.env.REPLICATE_API_TOKEN) {

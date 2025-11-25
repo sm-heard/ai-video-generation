@@ -1,9 +1,9 @@
 'use client';
 
 import Image from 'next/image';
-import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, Clock } from 'lucide-react';
-import { Player } from '@remotion/player';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, CheckCircle2, Clock, Download } from 'lucide-react';
+import { Player, type PlayerRef } from '@remotion/player';
 
 import { cn } from '@/lib/utils';
 import { MusicVideo, type SceneClip } from '@/remotion/MusicVideo';
@@ -66,11 +66,20 @@ function getStatusIndex(status: ProjectStatus) {
 export default function ProjectDetailClient({
   projectId,
 }: ProjectDetailClientProps) {
-  const [project, setProject] = useState<ApiProjectResponse['project'] | null>(
-    null,
-  );
+  const [project, setProject] =
+    useState<ApiProjectResponse['project'] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportUrl, setExportUrl] = useState<string | null>(null);
+  const [regeneratingSceneId, setRegeneratingSceneId] = useState<string | null>(
+    null,
+  );
+
+  const playerRef = useRef<PlayerRef>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     let isActive = true;
@@ -137,6 +146,119 @@ export default function ProjectDetailClient({
     }));
   }, [project]);
 
+  const fps = 30;
+  const durationInFrames = Math.max(
+    1,
+    Math.round((project?.duration ?? 1) * fps),
+  );
+
+  useEffect(() => {
+    return () => {
+      if (exportUrl) {
+        URL.revokeObjectURL(exportUrl);
+      }
+    };
+  }, [exportUrl]);
+
+  const handleExport = useCallback(async () => {
+    if (!project) {
+      return;
+    }
+    setExportError(null);
+    setIsExporting(true);
+    setExportUrl(null);
+
+    try {
+      const container = playerRef.current?.getContainerNode();
+      const canvas = container?.querySelector('canvas') as
+        | (HTMLCanvasElement & { captureStream?: (fps?: number) => MediaStream })
+        | undefined;
+      if (!canvas || typeof canvas.captureStream !== 'function') {
+        throw new Error('Unable to capture video stream from preview.');
+      }
+      const canvasStream = canvas.captureStream(fps);
+      const audioElement = audioRef.current;
+      const audioStream =
+        audioElement && 'captureStream' in audioElement
+          ? audioElement.captureStream()
+          : null;
+
+      const combinedStream = new MediaStream([
+        ...canvasStream.getVideoTracks(),
+        ...(audioStream ? audioStream.getAudioTracks() : []),
+      ]);
+
+      if (combinedStream.getTracks().length === 0) {
+        throw new Error('No media tracks available for export.');
+      }
+
+      const recorder = new MediaRecorder(combinedStream, {
+        mimeType: 'video/webm;codecs=vp9,opus',
+      });
+      const chunks: BlobPart[] = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+
+      const stopped = new Promise<void>((resolve) => {
+        recorder.onstop = () => resolve();
+      });
+
+      setIsAudioEnabled(true);
+      playerRef.current?.pause();
+      playerRef.current?.seekTo(0);
+      audioElement?.pause();
+      if (audioElement) {
+        audioElement.currentTime = 0;
+      }
+
+      recorder.start();
+      playerRef.current?.play();
+      await audioElement?.play();
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, project.duration * 1000 + 750),
+      );
+
+      recorder.stop();
+      await stopped;
+      playerRef.current?.pause();
+      audioElement?.pause();
+
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      const objectUrl = URL.createObjectURL(blob);
+      setExportUrl(objectUrl);
+    } catch (err) {
+      console.error('export-video', err);
+      setExportError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to export video. Please try again.',
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  }, [fps, project]);
+
+  const handleRegenerateScene = useCallback(async (sceneId: string) => {
+    setRegeneratingSceneId(sceneId);
+    try {
+      const response = await fetch(`/api/scenes/${sceneId}/regenerate`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to trigger regeneration');
+      }
+    } catch (error) {
+      console.error('scene-regenerate', error);
+      setErrorMessage('Unable to regenerate scene. Please try again later.');
+    } finally {
+      setRegeneratingSceneId(null);
+    }
+  }, []);
+
   if (isLoading) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/70">
@@ -152,9 +274,6 @@ export default function ProjectDetailClient({
       </div>
     );
   }
-
-  const fps = 30;
-  const durationInFrames = Math.max(1, Math.round(project.duration * fps));
 
   return (
     <div className="flex flex-col gap-8">
@@ -209,24 +328,55 @@ export default function ProjectDetailClient({
 
       {project.scenes.length > 0 && (
         <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <p className="text-sm uppercase tracking-wide text-white/60">
-              Live preview
-            </p>
-            <p className="text-sm text-white/60">
-              Powered by Remotion player · {fps} FPS
-            </p>
+          <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm uppercase tracking-wide text-white/60">
+                Live preview
+              </p>
+              <p className="text-xs text-white/50">
+                Hit play, then enable audio below to hear the exact track you uploaded.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-sm text-white/70">
+              <span>Powered by Remotion · {fps} FPS</span>
+              <button
+                type="button"
+                onClick={() => setIsAudioEnabled((prev) => !prev)}
+                className={cn(
+                  'rounded-full border px-3 py-1 transition',
+                  isAudioEnabled
+                    ? 'border-emerald-400/50 text-emerald-200'
+                    : 'border-white/20 text-white/70',
+                )}
+              >
+                {isAudioEnabled ? 'Audio on' : 'Enable audio'}
+              </button>
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={isExporting}
+                className="inline-flex items-center gap-2 rounded-full border border-emerald-400/40 px-4 py-1 text-sm font-medium text-emerald-100 transition disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Download className="h-4 w-4" />
+                {isExporting ? 'Exporting…' : 'Export MP4'}
+              </button>
+            </div>
           </div>
           <Player
             component={MusicVideo}
-            inputProps={{ scenes: remotionScenes, audioUrl: project.audioUrl, fps }}
+            inputProps={{
+              scenes: remotionScenes,
+              audioUrl: project.audioUrl,
+              fps,
+            }}
             durationInFrames={durationInFrames}
             compositionWidth={1280}
             compositionHeight={720}
             fps={fps}
             controls
             loop
-            autoPlay
+            muted={!isAudioEnabled}
+            ref={playerRef}
             style={{
               width: '100%',
               borderRadius: '1rem',
@@ -234,6 +384,34 @@ export default function ProjectDetailClient({
               border: '1px solid rgba(255,255,255,0.1)',
             }}
           />
+          <audio
+            className="mt-4 w-full"
+            controls
+            preload="none"
+            ref={audioRef}
+            src={project.audioUrl}
+          >
+            Your browser does not support the audio element.
+          </audio>
+          <p className="mt-2 text-xs text-white/50">
+            (The player above keeps video and audio in sync; the standalone audio controls are provided to avoid
+            autoplay restrictions.)
+          </p>
+          {exportError && (
+            <p className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+              {exportError}
+            </p>
+          )}
+          {exportUrl && (
+            <a
+              href={exportUrl}
+              download={`music-video-${project.id}.webm`}
+              className="mt-3 inline-flex items-center gap-2 rounded-lg border border-white/20 px-4 py-2 text-sm text-white hover:border-white/60"
+            >
+              <Download className="h-4 w-4" />
+              Download exported video
+            </a>
+          )}
         </section>
       )}
 
@@ -301,16 +479,25 @@ export default function ProjectDetailClient({
                   <span
                     className={cn(
                       'rounded-full px-3 py-1 text-xs uppercase tracking-wide',
-                      scene.status.includes('DONE')
+                      scene.status === 'VIDEO_DONE'
                         ? 'bg-emerald-400/20 text-emerald-200'
-                        : 'bg-white/10 text-white/70',
+                        : scene.status === 'ERROR'
+                          ? 'bg-red-500/30 text-red-200'
+                          : 'bg-white/10 text-white/70',
                     )}
                   >
                     {scene.status}
                   </span>
                 </div>
                 <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-white/10 bg-gradient-to-br from-slate-800 to-slate-900">
-                  {scene.imageKeyframeUrl ? (
+                  {scene.videoClipUrl ? (
+                    <video
+                      src={scene.videoClipUrl}
+                      controls
+                      className="h-full w-full object-cover"
+                      poster={scene.imageKeyframeUrl ?? undefined}
+                    />
+                  ) : scene.imageKeyframeUrl ? (
                     <Image
                       src={scene.imageKeyframeUrl}
                       alt={`Scene ${scene.order + 1}`}
@@ -321,11 +508,24 @@ export default function ProjectDetailClient({
                     />
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center text-sm text-white/50">
-                      Waiting for keyframe…
+                      Waiting for media…
                     </div>
                   )}
                 </div>
                 <p className="text-sm text-white/80">{scene.visualPrompt}</p>
+                <button
+                  type="button"
+                  onClick={() => handleRegenerateScene(scene.id)}
+                  disabled={
+                    regeneratingSceneId === scene.id ||
+                    scene.status.includes('PENDING')
+                  }
+                  className="text-xs uppercase tracking-wide text-white/70 underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:text-white/30"
+                >
+                  {regeneratingSceneId === scene.id
+                    ? 'Regenerating…'
+                    : 'Regenerate scene'}
+                </button>
               </div>
             ))}
           </div>
