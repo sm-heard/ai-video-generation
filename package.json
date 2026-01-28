@@ -22,7 +22,7 @@
     "inngest": "^3.46.0",
     "lucide-react": "^0.554.0",
     "mediabunny": "^1.25.1",
-    "next": "15.5.9",
+    "next": "16.1.5",
     "openai": "^6.9.1",
     "postgres": "^3.4.7",
     "react": "19.1.0",
